@@ -2,8 +2,9 @@ part of mustache4dart;
 
 class _Template {
   final _TokenList list;
-  
-  factory _Template({String template, Delimiter delimiter, String ident, Function partial}) {
+
+  factory _Template({String template, Delimiter delimiter, String ident,
+      Function partial}) {
     if (template == null) {
       throw new FormatException("The given template is null");
     }
@@ -16,8 +17,7 @@ class _Template {
         if (searchForOpening) { //opening delimiter
           tokens.addTokenWithBuffer(delimiter, ident, partial);
           searchForOpening = false;
-        }
-        else { //closing delimiter
+        } else { //closing delimiter
           tokens.write(delimiter.closing); //add the closing delimiter
           tokens.addTokenWithBuffer(delimiter, ident, partial);
           i = i + delimiter.closingLength - 1;
@@ -25,13 +25,11 @@ class _Template {
           searchForOpening = true;
           continue;
         }
-      }
-      else if (isSingleCharToken(char, searchForOpening)) {
+      } else if (isSingleCharToken(char, searchForOpening)) {
         tokens.addTokenWithBuffer(delimiter, ident, partial);
         tokens.addToken(char, delimiter, ident, partial);
         continue;
-      }
-      else if (isSpecialNewLine(template, i)) {
+      } else if (isSpecialNewLine(template, i)) {
         tokens.addTokenWithBuffer(delimiter, ident, partial);
         tokens.addToken(CRNL, delimiter, ident, partial);
         i++;
@@ -43,7 +41,7 @@ class _Template {
 
     return new _Template._internal(tokens);
   }
-  
+
   static bool isSingleCharToken(String char, bool opening) {
     if (!opening) {
       return false;
@@ -56,24 +54,28 @@ class _Template {
     }
     return false;
   }
-  
+
   static bool isSpecialNewLine(String template, int position) {
     if (position + 1 == template.length) {
       return false;
     }
     var char = template[position];
     var nextChar = template[position + 1];
-    return char == '\r' && nextChar == NL; 
+    return char == '\r' && nextChar == NL;
   }
-  
+
   _Template._internal(this.list);
-    
-  call(ctx, {StringSink out: null}) {
+
+  call(ctx, {StringSink out: null, bool errorOnMissingProperty: false,
+      bool assumeNullNonExistingProperty: true}) {
     StringSink o = out == null ? new StringBuffer() : out;
-    _write(ctx, o);
-    
+    _write(
+        ctx,
+        o,
+        assumeNullNonExistingProperty: assumeNullNonExistingProperty);
+
     //If we provide a StringSink, write there and return it as
-    //the response of the funtion. Otherwise make our library
+    //the response of the function. Otherwise make our library
     //easier to use by returning the string representation of
     //the template
     if (out == null) {
@@ -81,13 +83,15 @@ class _Template {
     }
     return o;
   }
-  
-  void _write(ctx, StringSink out) {
+
+  void _write(ctx, StringSink out, {bool assumeNullNonExistingProperty}) {
     if (list.head == null) {
       return EMPTY_STRING;
     }
     if (!(ctx is MustacheContext)) {
-      ctx = new MustacheContext(ctx);
+      ctx = new MustacheContext(
+          ctx,
+          assumeNullNonExistingProperty: assumeNullNonExistingProperty);
     }
 
     //Iterate the tokens and apply the context
@@ -96,7 +100,7 @@ class _Template {
       token = token(ctx, out);
     }
   }
-  
+
   String toString() {
     return "Template($list)";
   }
@@ -107,9 +111,9 @@ class _TokenList {
   Token head;
   Token tail;
   Delimiter _nextDelimiter;
-  Line line;
+  Line line = new Line(null);
   final List<_StartSectionToken> startingTokens = [];
-  
+
   _TokenList(Delimiter delimiter, String ident) {
     //Our template should start as an empty string token
     head = new _SpecialCharToken(EMPTY_STRING, ident);
@@ -117,32 +121,32 @@ class _TokenList {
     _nextDelimiter = delimiter;
     buffer = new StringBuffer();
   }
-  
-  void addTokenWithBuffer(Delimiter del, String ident, Function partial, {last: false}) {
+
+  void addTokenWithBuffer(Delimiter del, String ident, Function partial, {last:
+      false}) {
     if (buffer.length > 0) {
       addToken(buffer.toString(), del, ident, partial, last: last);
-      buffer = new StringBuffer();      
+      buffer = new StringBuffer();
     }
   }
-  
-  void addToken(String str, Delimiter del, String ident, Function partial, {last: false}) {
+
+  void addToken(String str, Delimiter del, String ident, Function partial,
+      {last: false}) {
     _add(new Token(str, partial, del, ident), last);
   }
-  
+
   void _add(Token other, [bool last]) {
     if (other == null) {
       return;
     }
     if (other is _DelimiterToken) {
       _nextDelimiter = other.newDelimiter;
-    }
-    else if (other is _StartSectionToken) {
+    } else if (other is _StartSectionToken) {
       _addStartingToken(other);
-    }
-    else if (other is _EndSectionToken) {
+    } else if (other is _EndSectionToken) {
       _addEndingToken(other);
     }
-    
+
     _addToLine(other, last);
 
     tail.next = other;
@@ -156,24 +160,19 @@ class _TokenList {
   void _addEndingToken(_EndSectionToken t) {
     var lastStarting = startingTokens.removeLast();
     if (lastStarting.value != t.value) {
-      throw new FormatException("Expected {{/${lastStarting.value}}} but got {{/${t.value}}}");
-    }
-    else {
+      throw new FormatException(
+          "Expected {{/${lastStarting.value}}} but got {{/${t.value}}}");
+    } else {
       lastStarting.endSection = t;
     }
   }
 
   void _addToLine(Token t, [bool last]) {
-    if (line == null) {
-      line = new Line(t);
-    }
-    else {
-      line = line.add(t, last);
-    }
+    line = line.add(t, last);
   }
-    
+
   Delimiter get nextDelimiter => _nextDelimiter;
-  
+
   void write(String txt) {
     buffer.write(txt);
   }
@@ -182,11 +181,9 @@ class _TokenList {
     StringBuffer str = new StringBuffer("TokenList(");
     if (head == null) {
       //Do not display anything
-    }
-    else if (head == tail) {
+    } else if (head == tail) {
       str.write(head);
-    }
-    else {
+    } else {
       str.write("$head...$tail");
     }
     str.write(")");
@@ -198,9 +195,9 @@ class Delimiter {
   final String opening;
   final String _closing;
   String realClosingTag;
-  
+
   Delimiter(this.opening, this._closing);
-  
+
   bool isDelimiter(String template, int position, bool opening) {
     String d = opening ? this.opening : this._closing;
     if (d.length == 1) {
@@ -218,19 +215,18 @@ class Delimiter {
     //A hack to support tripple brackets
     if (!opening && _closing == '}}' && template[endIndex] == '}') {
       realClosingTag = '}}}';
-    }
-    else {
+    } else {
       realClosingTag = null;
     }
     return true;
   }
-  
+
   String get closing => realClosingTag != null ? realClosingTag : _closing;
-  
+
   int get closingLength => closing.length;
-  
+
   int get openingLength => opening.length;
-  
+
   toString() => "Delimiter($opening, $closing)";
 }
 
